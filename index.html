@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Tally">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#f5f7fa" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#111418" media="(prefers-color-scheme: dark)">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
+<title>Tally</title>
+<style>
+  :root { --bg:#f5f7fa; --card:#fff; --text:#1f1f1f; --muted:#6b7280; --line:#e5e7eb; --navy:#1f4e78; --red:#d93025; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#111418; --card:#1b1f24; --text:#eceff3; --muted:#9aa3ad; --line:#2c323a; --navy:#7fb2e5; --red:#ff6b5e; } }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--text);
+               font-family:-apple-system,BlinkMacSystemFont,"PingFang TC","Noto Sans TC",sans-serif; overscroll-behavior:none; }
+  #frameWrap { position:fixed; inset:0; padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom) 0; box-sizing:border-box; display:none; }
+  #app { border:0; width:100%; height:100%; display:block; background:var(--bg); }
+  #gate { position:fixed; inset:0; display:none; align-items:center; justify-content:center; padding:24px; box-sizing:border-box; }
+  .box { width:100%; max-width:360px; text-align:center; }
+  .box img { width:96px; height:96px; border-radius:22px; box-shadow:0 6px 20px rgba(0,0,0,.12); }
+  h1 { font-size:26px; margin:16px 0 4px; }
+  p { color:var(--muted); font-size:14px; margin:0 0 20px; line-height:1.6; }
+  input { width:100%; box-sizing:border-box; font-size:20px; padding:14px; border:1px solid var(--line); border-radius:12px;
+          background:var(--card); color:var(--text); text-align:center; letter-spacing:2px; -webkit-appearance:none; }
+  button { width:100%; border:0; border-radius:12px; padding:15px; font-size:17px; font-weight:600; background:var(--navy); color:#fff; margin-top:12px; }
+  .err { color:var(--red); font-size:14px; min-height:20px; margin-top:10px; }
+  #splash { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; }
+  #splash img { width:88px; height:88px; border-radius:20px; opacity:.9; }
+</style>
+</head>
+<body>
+<div id="splash"><img src="icon-192.png" alt=""></div>
+
+<div id="gate">
+  <div class="box">
+    <img src="icon-192.png" alt="Tally">
+    <h1>Tally</h1>
+    <p id="gateMsg">第一次使用，請輸入在試算表設定的 Tally 密碼</p>
+    <input id="pin" type="password" autocomplete="current-password" placeholder="密碼" enterkeyhint="go">
+    <button onclick="savePin()">開始使用</button>
+    <div class="err" id="err"></div>
+  </div>
+</div>
+
+<div id="frameWrap"><iframe id="app" title="Tally" allow="clipboard-write"></iframe></div>
+
+<script>
+  // ⬇⬇⬇ 只需要改這裡：貼上 Apps Script「網頁應用程式」的網址（結尾是 /exec）⬇⬇⬇
+  var APP_URL = 'https://script.google.com/macros/s/請貼上你的部署ID/exec';
+  // ⬆⬆⬆
+
+  var STORE = 'tally_pin';
+  var $ = function (id) { return document.getElementById(id); };
+
+  function getPin() { try { return localStorage.getItem(STORE) || ''; } catch (e) { return ''; } }
+  function setPin(v) { try { if (v) localStorage.setItem(STORE, v); else localStorage.removeItem(STORE); } catch (e) {} }
+
+  var launchId = 0;   // 每次啟動的編號；舊的 onload／計時器不會覆蓋新的畫面
+
+  function showGate(msg) {
+    launchId++;
+    $('splash').style.display = 'none'; $('frameWrap').style.display = 'none';
+    $('gate').style.display = 'flex';
+    if (msg) $('gateMsg').textContent = msg;
+    $('pin').value = ''; setTimeout(function () { $('pin').focus(); }, 300);
+  }
+
+  function reveal(id) {
+    if (id !== launchId) return;
+    $('splash').style.display = 'none'; $('frameWrap').style.display = 'block';
+  }
+
+  function launch() {
+    var pin = getPin();
+    if (!pin) { showGate(); return; }
+    if (APP_URL.indexOf('請貼上') >= 0) { showGate('尚未設定 APP_URL，請編輯 index.html'); return; }
+    var id = ++launchId;
+    $('gate').style.display = 'none'; $('splash').style.display = 'flex';
+    var f = $('app');
+    f.onload = function () { reveal(id); };
+    f.src = APP_URL + '?k=' + encodeURIComponent(pin) + (location.hash ? location.hash : '');
+    // 最多等 8 秒就先顯示，避免網路慢時一直卡在啟動畫面
+    setTimeout(function () { reveal(id); }, 8000);
+  }
+
+  function savePin() {
+    var v = $('pin').value.trim();
+    if (v.length < 6) { $('err').textContent = '密碼至少 6 個字'; return; }
+    $('err').textContent = '';
+    setPin(v); launch();
+  }
+  $('pin').addEventListener('keydown', function (e) { if (e.key === 'Enter') savePin(); });
+
+  // Tally 頁面回報密碼錯誤 → 清掉並重新詢問
+  window.addEventListener('message', function (e) {
+    if (e.data && e.data.tally === 'need-key') {
+      setPin('');
+      showGate('密碼不正確或已更改，請重新輸入');
+      $('app').onload = null;
+      $('app').src = 'about:blank';
+    }
+  });
+
+  launch();
+</script>
+</body>
+</html>
